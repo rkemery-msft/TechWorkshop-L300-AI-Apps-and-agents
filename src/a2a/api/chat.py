@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from a2a.agent.product_management_agent import AgentFrameworkProductManagementAgent
+from agent.product_management_agent import AgentFrameworkProductManagementAgent
 
 logger = logging.getLogger(__name__)
 

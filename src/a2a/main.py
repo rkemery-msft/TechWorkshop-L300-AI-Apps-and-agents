@@ -10,8 +10,8 @@ from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
 from dotenv import load_dotenv
 
-from a2a.api.chat import router as chat_router
-from a2a.agent.a2a_server import A2AServer
+from api.chat import router as chat_router
+from agent.a2a_server import A2AServer
 
 # Load environment variables
 load_dotenv()
