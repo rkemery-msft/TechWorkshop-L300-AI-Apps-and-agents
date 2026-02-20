@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import uuid
 from typing import Dict
 
@@ -7,7 +8,10 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from agent.product_management_agent import AgentFrameworkProductManagementAgent
+from agent.product_management_agent import (
+    AgentFrameworkProductManagementAgent,
+    get_products,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +42,19 @@ def _is_rate_limit_error(error: Exception) -> bool:
     return "429" in message or "ratelimit" in message or "rate limit" in message
 
 
+def _build_local_response(user_message: str) -> str:
+    products = get_products(user_message)
+    if not products:
+        return "I couldn't find products right now. Please try again."
+
+    lines = ["Here are products currently available:"]
+    for product in products:
+        lines.append(
+            f"- {product['name']} (${product['price']}): {product['description']}"
+        )
+    return "\n".join(lines)
+
+
 async def _invoke_agent_with_timeout(message: str, session_id: str, timeout_seconds: int = 15):
     def _run_in_thread():
         return asyncio.run(product_management_agent.invoke(message, session_id))
@@ -55,13 +72,22 @@ async def send_message(chat_message: ChatMessage):
         session_id = chat_message.session_id or str(uuid.uuid4())
         active_sessions[session_id] = session_id
 
-        response = await _invoke_agent_with_timeout(chat_message.message, session_id)
+        use_model = os.getenv("A2A_USE_MODEL", "false").lower() == "true"
+        if use_model:
+            response = await _invoke_agent_with_timeout(chat_message.message, session_id)
+            content = response.get("content", "No response available")
+            is_complete = response.get("is_task_complete", False)
+            requires_input = response.get("require_user_input", True)
+        else:
+            content = _build_local_response(chat_message.message)
+            is_complete = True
+            requires_input = True
 
         return ChatResponse(
-            response=response.get("content", "No response available"),
+            response=content,
             session_id=session_id,
-            is_complete=response.get("is_task_complete", False),
-            requires_input=response.get("require_user_input", True),
+            is_complete=is_complete,
+            requires_input=requires_input,
         )
     except asyncio.TimeoutError:
         session_id = chat_message.session_id or str(uuid.uuid4())
@@ -106,6 +132,23 @@ async def stream_message(chat_message: ChatMessage):
 
         async def generate_response():
             try:
+                use_model = os.getenv("A2A_USE_MODEL", "false").lower() == "true"
+                if not use_model:
+                    local_text = _build_local_response(chat_message.message)
+                    yield (
+                        "data: "
+                        + str(
+                            {
+                                "content": local_text,
+                                "session_id": session_id,
+                                "is_complete": True,
+                                "requires_input": True,
+                            }
+                        )
+                        + "\n\n"
+                    )
+                    return
+
                 async for partial in product_management_agent.stream(
                     chat_message.message,
                     session_id,
