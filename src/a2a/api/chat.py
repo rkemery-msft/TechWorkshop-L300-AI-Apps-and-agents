@@ -38,6 +38,16 @@ def _is_rate_limit_error(error: Exception) -> bool:
     return "429" in message or "ratelimit" in message or "rate limit" in message
 
 
+async def _invoke_agent_with_timeout(message: str, session_id: str, timeout_seconds: int = 15):
+    def _run_in_thread():
+        return asyncio.run(product_management_agent.invoke(message, session_id))
+
+    return await asyncio.wait_for(
+        asyncio.to_thread(_run_in_thread),
+        timeout=timeout_seconds,
+    )
+
+
 @router.post("/message", response_model=ChatResponse)
 async def send_message(chat_message: ChatMessage):
     """Send a message to the product management agent and get a response."""
@@ -45,10 +55,7 @@ async def send_message(chat_message: ChatMessage):
         session_id = chat_message.session_id or str(uuid.uuid4())
         active_sessions[session_id] = session_id
 
-        response = await asyncio.wait_for(
-            product_management_agent.invoke(chat_message.message, session_id),
-            timeout=15,
-        )
+        response = await _invoke_agent_with_timeout(chat_message.message, session_id)
 
         return ChatResponse(
             response=response.get("content", "No response available"),
