@@ -1,0 +1,43 @@
+name: Deploy chat app image to ACR
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "src/**"
+      - ".github/workflows/deploy-acr-chat-app.yml"
+  workflow_dispatch:
+
+env:
+  IMAGE_NAME: chat-app
+  AZURE_CONTAINER_REGISTRY: ${{ secrets.AZURE_CONTAINER_REGISTRY }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create .env from secret
+        shell: bash
+        env:
+          ENV: ${{ secrets.ENV }}
+        run: |
+          printf "%s" "$ENV" > src/.env
+
+      - name: Login to ACR
+        uses: azure/docker-login@v1
+        with:
+          login-server: ${{ secrets.AZURE_CONTAINER_REGISTRY }}
+          username: ${{ secrets.AZURE_CONTAINER_REGISTRY_USERNAME }}
+          password: ${{ secrets.AZURE_CONTAINER_REGISTRY_PASSWORD }}
+
+      - name: Build and push Docker image
+        shell: bash
+        run: |
+          cd src
+          docker build -t $AZURE_CONTAINER_REGISTRY/$IMAGE_NAME:latest .
+          docker push $AZURE_CONTAINER_REGISTRY/$IMAGE_NAME:latest
