@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import uuid
 from typing import Dict
@@ -44,13 +45,27 @@ async def send_message(chat_message: ChatMessage):
         session_id = chat_message.session_id or str(uuid.uuid4())
         active_sessions[session_id] = session_id
 
-        response = await product_management_agent.invoke(chat_message.message, session_id)
+        response = await asyncio.wait_for(
+            product_management_agent.invoke(chat_message.message, session_id),
+            timeout=15,
+        )
 
         return ChatResponse(
             response=response.get("content", "No response available"),
             session_id=session_id,
             is_complete=response.get("is_task_complete", False),
             requires_input=response.get("require_user_input", True),
+        )
+    except asyncio.TimeoutError:
+        session_id = chat_message.session_id or str(uuid.uuid4())
+        return ChatResponse(
+            response=(
+                "The agent is taking longer than expected right now. "
+                "Please try your message again in a few seconds."
+            ),
+            session_id=session_id,
+            is_complete=False,
+            requires_input=True,
         )
     except Exception as error:
         if _is_rate_limit_error(error):
@@ -66,7 +81,13 @@ async def send_message(chat_message: ChatMessage):
                 requires_input=True,
             )
         logger.error("Error processing chat message: %s", error)
-        raise HTTPException(status_code=500, detail=str(error)) from error
+        session_id = chat_message.session_id or str(uuid.uuid4())
+        return ChatResponse(
+            response="Something went wrong while contacting the agent. Please try again.",
+            session_id=session_id,
+            is_complete=False,
+            requires_input=True,
+        )
 
 
 @router.post("/stream")
