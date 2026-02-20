@@ -32,6 +32,11 @@ class ChatResponse(BaseModel):
     requires_input: bool
 
 
+def _is_rate_limit_error(error: Exception) -> bool:
+    message = str(error).lower()
+    return "429" in message or "ratelimit" in message or "rate limit" in message
+
+
 @router.post("/message", response_model=ChatResponse)
 async def send_message(chat_message: ChatMessage):
     """Send a message to the product management agent and get a response."""
@@ -48,6 +53,18 @@ async def send_message(chat_message: ChatMessage):
             requires_input=response.get("require_user_input", True),
         )
     except Exception as error:
+        if _is_rate_limit_error(error):
+            logger.warning("Rate limit reached while processing chat message")
+            session_id = chat_message.session_id or str(uuid.uuid4())
+            return ChatResponse(
+                response=(
+                    "I'm getting a high volume of requests right now. "
+                    "Please wait a few seconds and try again."
+                ),
+                session_id=session_id,
+                is_complete=False,
+                requires_input=True,
+            )
         logger.error("Error processing chat message: %s", error)
         raise HTTPException(status_code=500, detail=str(error)) from error
 
@@ -81,6 +98,9 @@ async def stream_message(chat_message: ChatMessage):
                     if is_complete:
                         break
             except Exception as error:
+                if _is_rate_limit_error(error):
+                    yield "data: {'error': 'rate_limit', 'message': 'High request volume. Please try again in a few seconds.'}\n\n"
+                    return
                 logger.error("Error in streaming response: %s", error)
                 yield f"data: {{'error': '{str(error)}'}}\n\n"
 

@@ -62,6 +62,7 @@ def _get_azure_openai_chat_completion_service() -> AzureOpenAIChatClient:
             azure_endpoint=endpoint,
             azure_ad_token_provider=token_provider,
             api_version=api_version,
+            max_retries=1,
         )
         return AzureOpenAIChatClient(
             service_id=service_id,
