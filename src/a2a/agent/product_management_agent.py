@@ -63,6 +63,7 @@ def _get_azure_openai_chat_completion_service() -> AzureOpenAIChatClient:
             azure_ad_token_provider=token_provider,
             api_version=api_version,
             max_retries=1,
+            timeout=20.0,
         )
         return AzureOpenAIChatClient(
             service_id=service_id,
@@ -70,12 +71,17 @@ def _get_azure_openai_chat_completion_service() -> AzureOpenAIChatClient:
             async_client=async_client,
         )
 
+    async_client = openai.AsyncAzureOpenAI(
+        azure_endpoint=endpoint,
+        api_key=api_key,
+        api_version=api_version,
+        max_retries=1,
+        timeout=20.0,
+    )
     return AzureOpenAIChatClient(
         service_id=service_id,
         deployment_name=deployment_name,
-        endpoint=endpoint,
-        api_key=api_key,
-        api_version=api_version,
+        async_client=async_client,
     )
 
 
